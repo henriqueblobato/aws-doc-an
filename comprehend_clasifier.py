@@ -2,7 +2,6 @@ import logging
 from enum import Enum
 from pprint import pprint
 from threading import Thread
-from time import sleep
 
 import boto3
 from botocore.exceptions import ClientError
@@ -15,24 +14,28 @@ def parse_entities(entities):
     response_dict = {}
     for entity in entities:
         text = entity.get('Text')
-        type_name = entity.get('Type')
-        if type_name not in response_dict.keys():
-            response_dict[type_name] = [{
-                'Text': text,
-                'Counter': 1,
+        key = entity.get('Type')
+        score = entity.get('Score')
+        score = round(score, 4)
+        if key not in response_dict.keys():
+            response_dict[key] = [{
+                'text': text,
+                'score': score,
+                'count': 1
             }]
         else:
-            for i in response_dict[type_name]:
-                if text not in i.values():
-                    response_dict[type_name].append({
-                        'Text': text,
-                        'Counter': 1,
-                    })
-                    break
-                else:
-                    i['Counter'] += 1
-                    break
-
+            values = [i.get('text') for i in response_dict[key]]
+            if text not in values:
+                response_dict[key].append({
+                    'text': text,
+                    'score': score,
+                    'count': 1
+                })
+            else:
+                for i in response_dict[key]:
+                    if i.get('text') == text:
+                        i['score'] = max(i['score'], score)
+                        i['count'] += 1
     return response_dict
 
 
@@ -102,6 +105,7 @@ class ComprehendDetect:
             response = self.comprehend_client.detect_entities(
                 Text=text, LanguageCode=language_code)
             entities = response['Entities']
+            print(entities)
             entities = parse_entities(entities)
             logger.info("Detected %s entities.", len(entities))
         except ClientError:
@@ -124,7 +128,7 @@ class ComprehendDetect:
             response = self.comprehend_client.detect_key_phrases(
                 Text=text, LanguageCode=language_code)
             phrases = response['KeyPhrases']
-            phrases = get_top_key_phrases_by_score(phrases, top_n=20)
+            phrases = get_top_key_phrases_by_score(phrases, top_n=30)
             logger.info("Detected %s phrases.", len(phrases))
         except ClientError:
             logger.exception("Couldn't detect phrases.")
