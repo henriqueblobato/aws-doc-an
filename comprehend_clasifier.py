@@ -269,10 +269,10 @@ def usage_demo():
     lang_code = languages[0]['LanguageCode']
 
     functions = [
-        # comp_detect.detect_entities,
-        # comp_detect.detect_key_phrases,
-        # comp_detect.detect_sentiment,
-        # comp_detect.detect_syntax,
+        comp_detect.detect_entities,
+        comp_detect.detect_key_phrases,
+        comp_detect.detect_sentiment,
+        comp_detect.detect_syntax,
         comp_detect.detect_pii,
     ]
 
