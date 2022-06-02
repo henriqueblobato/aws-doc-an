@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from pprint import pprint
 from threading import Thread
@@ -92,6 +93,45 @@ class ComprehendDetect:
         else:
             return languages
 
+    def detect_pii(self, text, language_code, results, demo_size):
+        """
+        Detects PII in a document. PII is personal information that can be
+        identified from the text.
+
+        :param text: The document to inspect.
+        :param language_code: The language of the document.
+        :return: The list of entities along with their confidence scores.
+        """
+        # if not language_code == LanguageEnum.en.value:
+        #     logger.warning("PII detection only works for English.")
+        #     return {'PII': []}
+        try:
+            response = self.comprehend_client.detect_pii_entities(
+                Text=text,
+                LanguageCode='en'
+            )
+            piis = response['Entities']
+            return_response = []
+            for entity in piis:
+                score = entity.get('Score')
+                begin_offset = entity.get('BeginOffset')
+                end_offset = entity.get('EndOffset')
+                entity_text = text[begin_offset:end_offset]
+                entity_type = entity.get('Type')
+                return_response.append({
+                    'Text': entity_text,
+                    'Score': score,
+                    'Type': entity_type
+                })
+            piis = parse_entities(return_response)
+            logger.info("Detected %s entities.", len(piis))
+        except ClientError:
+            logger.exception("Couldn't detect entities.")
+            raise
+        else:
+            results.append({'PII': piis})
+            return piis
+
     def detect_entities(self, text, language_code, results, demo_size):
         """
         Detects entities in a document. Entities can be things like people and places
@@ -105,7 +145,6 @@ class ComprehendDetect:
             response = self.comprehend_client.detect_entities(
                 Text=text, LanguageCode=language_code)
             entities = response['Entities']
-            print(entities)
             entities = parse_entities(entities)
             logger.info("Detected %s entities.", len(entities))
         except ClientError:
@@ -187,6 +226,32 @@ class ComprehendDetect:
             results.append({'Syntax': tokens[:demo_size]})
             return tokens
 
+    def detect(self, threads=1, demo_size=10, language_code=LanguageEnum.en):
+        """
+        Detects entities, key phrases, sentiments, and syntax in a document.
+
+        param threads: The number of threads to use.
+        :return: A list of dictionaries containing the results of the analysis.
+        """
+        results = []
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            for text in self.texts:
+                if language_code:
+                    language_code = language_code[0]['LanguageCode']
+                    entities = executor.submit(
+                        self.detect_entities, text, language_code, results, demo_size)
+                    key_phrases = executor.submit(
+                        self.detect_key_phrases, text, language_code, results, demo_size)
+                    sentiment = executor.submit(
+                        self.detect_sentiment, text, language_code, results, demo_size)
+                    syntax = executor.submit(
+                        self.detect_syntax, text, language_code, results, demo_size)
+                    entities.result()
+                    key_phrases.result()
+                    sentiment.result()
+                    syntax.result()
+        return results
+
 
 def usage_demo():
 
@@ -204,10 +269,11 @@ def usage_demo():
     lang_code = languages[0]['LanguageCode']
 
     functions = [
-        comp_detect.detect_entities,
-        comp_detect.detect_key_phrases,
-        comp_detect.detect_sentiment,
-        comp_detect.detect_syntax,
+        # comp_detect.detect_entities,
+        # comp_detect.detect_key_phrases,
+        # comp_detect.detect_sentiment,
+        # comp_detect.detect_syntax,
+        comp_detect.detect_pii,
     ]
 
     results = []
